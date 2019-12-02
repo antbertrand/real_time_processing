@@ -14,6 +14,7 @@
 #include <cstring>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 /*
 typedef char MY_TYPE;
@@ -40,8 +41,8 @@ typedef double MY_TYPE;
 struct Struct_Reverb { 
 	double *rep_imp;
 	unsigned int rep_size;
-	unsigned int buffer_bytes;
-	void *temp_buffer;
+	unsigned int buffer_frames;
+	double *temp_buffer;
   };
 
 void usage( void ) {
@@ -68,9 +69,25 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   // Since the number of input and output channels is equal, we can do
   // a simple buffer copy operation here.
   if ( status ) std::cout << "Stream over/underflow detected." << std::endl;
-  unsigned int bytes = ((Struct_Reverb*)data)->buffer_bytes;
+  Struct_Reverb* SR = (Struct_Reverb*) data;
+  unsigned int L = SR->buffer_frames;
+  unsigned int M = SR->rep_size;
+  double *imp = SR->rep_imp;
+  double *input = (double*) inputBuffer;
   
-  memcpy( outputBuffer, inputBuffer, bytes );
+  unsigned int a = fmin(L-1,0);
+  std::cout << a << "\n\n" ;
+  for ( int i = 0 ; i < M + L - 1 ; i ++) {
+	for ( int j = fmax(i-M+1,0) ; j < fmin(L-1,i) ; j++) {
+		std::cout << "\n" << "MAX" <<fmax(i-M+1,0) << "\n";
+		std::cout << "\n"  << "MIN" << fmin(L-1,i) << "\n";
+		SR->temp_buffer[i] += input[j]*imp[i-j];
+	}
+  }
+  std::cout << "ici";
+  memcpy( outputBuffer, (void *)&(SR->temp_buffer), L*sizeof(double) );
+  std::cout << "ici";
+  memcpy((void *)&(SR->temp_buffer), (void *)&(SR->temp_buffer[L]), (M-1)*sizeof(double));
   return 0;
 }
 
@@ -103,7 +120,6 @@ int main( int argc, char *argv[] )
   // copy the file into the buffer:
   result = fread (imp,1,lSize,pFile);
   if (result != lSize) {fputs ("Reading error",stderr); exit (3);}
-  
   // terminate
   fclose (pFile);
 
@@ -158,11 +174,10 @@ int main( int argc, char *argv[] )
 
   bufferBytes = bufferFrames * channels * sizeof( MY_TYPE );
 
-  S_R->buffer_bytes = bufferBytes;
+  S_R->buffer_frames = bufferFrames;
 
   // Creating temporary buffer for convolution computing. Size M + L - 1
   S_R->temp_buffer = (double*) malloc (sizeof(double)*(S_R->rep_size + bufferFrames - 1));
-
 
   try {
     adac.openStream( &oParams, &iParams, FORMAT, fs, &bufferFrames, &inout,(void*) S_R, &options );
